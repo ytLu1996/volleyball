@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>排球季打</title>
+<meta name="theme-color" content="#1f5fbf">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" id="appleTitle" content="排球季打">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" id="manifest" href="manifest.webmanifest">
+<link rel="icon" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+  :root { --accent: #1f5fbf; --bg: #f2f4f7; --card: #fff; --fg: #1a2230; --muted: #697486; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #10151c; --card: #19202a; --fg: #e7ecf3; --muted: #97a2b3; } }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+    font: 15px/1.6 -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
+  body { display: flex; flex-direction: column; padding-top: env(safe-area-inset-top, 0px); box-sizing: border-box; }
+  #frame { flex: 1; width: 100%; border: 0; display: block; background: var(--bg); }
+  #splash { position: fixed; inset: 0; display: grid; place-items: center; background: var(--bg); z-index: 2; transition: opacity .3s; }
+  #splash img { width: 96px; height: 96px; border-radius: 22px; box-shadow: 0 6px 20px rgba(0,0,0,.15); }
+  #splash p { margin: 12px 0 0; color: var(--muted); text-align: center; }
+  #splash.hide { opacity: 0; pointer-events: none; }
+  #install { position: fixed; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 3;
+    background: var(--card); border-radius: 14px; box-shadow: 0 8px 30px rgba(0,0,0,.25); padding: 14px 16px;
+    display: flex; gap: 12px; align-items: center; }
+  #install img { width: 44px; height: 44px; border-radius: 10px; flex: none; }
+  #install .t { flex: 1; min-width: 0; font-size: 14px; }
+  #install b { display: block; font-size: 15px; }
+  #install button { font: inherit; border: 0; border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+  #install .go { background: var(--accent); color: #fff; font-weight: 600; }
+  #install .x { background: transparent; color: var(--muted); padding: 8px; }
+  #offline { padding: 40px 24px; text-align: center; color: var(--muted); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div id="splash"><div><img src="icon-192.png" alt=""><p id="splashText">讀取中…</p></div></div>
+<iframe id="frame" title="排球季打" allow="clipboard-write"></iframe>
+<div id="offline" hidden>目前沒有網路，請連上網路後再打開。</div>
+<div id="install" hidden role="dialog" aria-label="安裝 App">
+  <img src="icon-192.png" alt="">
+  <div class="t"><b>加到主畫面</b><span id="installHow"></span></div>
+  <button class="go" id="installBtn" hidden>安裝</button>
+  <button class="x" id="installClose" aria-label="關閉">✕</button>
+</div>
+
+<script>
+/* ======================================================
+ * ★ 只要改這裡：貼上 Apps Script「部署 → 管理部署作業」裡的網頁應用程式網址（結尾是 /exec）
+ * ====================================================== */
+const APP_URL = 'https://script.google.com/macros/s/https://script.google.com/macros/s/AKfycbwdsl0YraVSeZsXBdE0yIyNmkd817XGsP6b-C44rGBv5jcpYpCtW6nMTaP-ow5FEpE6/exec/exec';
+
+/* ---------- 參數處理 ----------
+ * ?g=場地ID   直接打開某個場地
+ * ?admin=密碼 團主模式（會記在這支手機，之後從主畫面打開也是團主模式）
+ * ?admin=     （空白）登出團主模式
+ */
+function store(k, v) {
+  try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); }
+  catch (e) { return null; }
+}
+const q = new URLSearchParams(location.search);
+if (q.has('admin')) store('vb-admin', q.get('admin') || null);
+const admin = store('vb-admin');
+const g = q.get('g');
+
+const src = new URL(APP_URL);
+if (admin) src.searchParams.set('admin', admin);
+if (g) src.searchParams.set('g', g);
+
+// 網址列拿掉密碼，避免被截圖或分享出去
+if (q.has('admin') || q.has('openExternalBrowser')) {
+  q.delete('admin'); q.delete('openExternalBrowser');
+  history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : ''));
+}
+
+/* ---------- 載入系統 ---------- */
+const frame = document.getElementById('frame');
+const splash = document.getElementById('splash');
+if (APP_URL.indexOf('請貼上') >= 0) {
+  document.getElementById('splashText').textContent = '尚未設定：請在 index.html 的 APP_URL 貼上部署網址';
+} else if (!navigator.onLine) {
+  splash.classList.add('hide'); frame.hidden = true; document.getElementById('offline').hidden = false;
+} else {
+  frame.addEventListener('load', () => setTimeout(() => splash.classList.add('hide'), 300));
+  frame.src = src.toString();
+  setTimeout(() => splash.classList.add('hide'), 8000);
+}
+window.addEventListener('online', () => { if (frame.hidden) location.reload(); });
+
+/* ---------- 安裝提示 ---------- */
+const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const ua = navigator.userAgent;
+const isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const inLine = / Line\//i.test(ua);
+const box = document.getElementById('install'), how = document.getElementById('installHow'), btn = document.getElementById('installBtn');
+let deferred = null;
+
+function showInstall(text, canClick) {
+  if (standalone || store('vb-install-dismissed') === '1') return;
+  how.textContent = text; btn.hidden = !canClick; box.hidden = false;
+}
+document.getElementById('installClose').onclick = () => { box.hidden = true; store('vb-install-dismissed', '1'); };
+
+if (!standalone) {
+  if (inLine) {
+    setTimeout(() => showInstall('請點右上角「⋯」→ 用預設瀏覽器開啟，再加到主畫面', false), 2500);
+  } else if (isIOS) {
+    setTimeout(() => showInstall('點下方「分享」按鈕 → 選「加入主畫面」', false), 2500);
+  } else {
+    window.addEventListener('beforeinstallprompt', e => {
+      e.preventDefault(); deferred = e;
+      showInstall('裝到手機桌面，下次一點就開', true);
+    });
+  }
+}
+btn.onclick = async () => {
+  if (!deferred) return;
+  deferred.prompt();
+  await deferred.userChoice.catch(() => null);
+  deferred = null; box.hidden = true;
+};
+window.addEventListener('appinstalled', () => { box.hidden = true; });
+
+/* ---------- App 名稱：由團主在系統裡設定 ----------
+ * 先用上次記住的名稱，再向系統讀最新的名稱；加到主畫面時會用這個名字
+ */
+function applyName(name) {
+  if (!name) return;
+  document.title = name;
+  document.getElementById('appleTitle').setAttribute('content', name);
+  document.getElementById('frame').title = name;
+  const abs = p => new URL(p, location.href).href;
+  const m = {
+    name: name, short_name: name.slice(0, 12), description: '季打請假、臨打報名、候補遞補', lang: 'zh-Hant',
+    id: abs('./'), start_url: abs('./'), scope: abs('./'), display: 'standalone', orientation: 'portrait',
+    background_color: '#f2f4f7', theme_color: '#1f5fbf',
+    icons: [
+      { src: abs('icon-192.png'), sizes: '192x192', type: 'image/png' },
+      { src: abs('icon-512.png'), sizes: '512x512', type: 'image/png' },
+      { src: abs('icon-maskable-512.png'), sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+    ]
+  };
+  document.getElementById('manifest').href = 'data:application/manifest+json,' + encodeURIComponent(JSON.stringify(m));
+}
+applyName(store('vb-app-name'));
+if (APP_URL.indexOf('請貼上') < 0 && navigator.onLine) {
+  fetch(APP_URL + (APP_URL.indexOf('?') >= 0 ? '&' : '?') + 'api=meta')
+    .then(r => r.json())
+    .then(j => { if (j && j.name && j.name !== store('vb-app-name')) { store('vb-app-name', j.name); applyName(j.name); } })
+    .catch(() => {});
+}
+
+/* ---------- 離線快取（讓手機認得這是 App） ---------- */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+</script>
+</body>
+</html>
